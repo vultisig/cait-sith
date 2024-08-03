@@ -145,6 +145,27 @@ This cost is low enough to be bottlenecked by network performance, most likely.
 
 ## Networked Benchmarks
 
+Update : 
+
+Before, you had to run this command : 
+
+```
+cargo run --release -F k256 --example network-benches -- n 100 10000000
+```
+
+where n is the number of participants AND the threshold. 
+
+Now, you can run : 
+
+```
+cargo run --release -F k256 --example network-benches -- n t 100 10000000
+```
+in order to specify the threshold. I do not know yet if it is secure to do so, but it works.
+
+End of the update.
+
+
+
 The library also has an example which runs a benchmark simulating
 network latency and bandwidth constraints.
 Note that in these examples, multiple threads are used, so better

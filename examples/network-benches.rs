@@ -28,10 +28,13 @@ fn scalar_hash(msg: &[u8]) -> Scalar {
 struct Args {
     /// The number of parties to run the benchmarks with.
     parties: u32,
+    //threshold 
+    threshold: u32,
     /// The latency, in milliseconds.
     latency_ms: u32,
     /// The bandwidth, in bytes per second.
     bandwidth: u32,
+    
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -199,12 +202,12 @@ fn main() {
         .collect();
 
     println!(
-        "\nTriple Gen {} [{} ms, {} B/S]",
+        "\nTriple Gen, {} [{} ms, {} B/S]",
         args.parties, args.latency_ms, args.bandwidth
     );
     let start = Instant::now();
     let results = run_protocol(latency, bandwidth, &participants, |p| {
-        triples::generate_triple::<Secp256k1>(&participants, p, args.parties as usize).unwrap()
+        triples::generate_triple::<Secp256k1>(&participants, p, args.threshold as usize).unwrap()
     });
     let stop = Instant::now();
     println!("time:\t{:#?}", stop.duration_since(start));
@@ -214,11 +217,11 @@ fn main() {
 
     println!(
         "\nKeygen ({}, {}) [{} ms, {} B/S]",
-        args.parties, args.parties, args.latency_ms, args.bandwidth
+        args.parties, args.threshold, args.latency_ms, args.bandwidth
     );
     let start = Instant::now();
     let results = run_protocol(latency, bandwidth, &participants, |p| {
-        keygen(&participants, p, args.parties as usize).unwrap()
+        keygen(&participants, p, args.threshold as usize).unwrap()
     });
     let stop = Instant::now();
     println!("time:\t{:#?}", stop.duration_since(start));
@@ -227,7 +230,7 @@ fn main() {
     let shares: HashMap<_, _> = results.into_iter().map(|(p, _, out)| (p, out)).collect();
 
     let (other_triples_pub, other_triples_share) =
-        triples::deal(&mut OsRng, &participants, args.parties as usize);
+        triples::deal(&mut OsRng, &participants, args.threshold as usize);
     let other_triples: HashMap<_, _> = participants
         .iter()
         .zip(other_triples_share)
@@ -236,7 +239,7 @@ fn main() {
 
     println!(
         "\nPresign ({}, {}) [{} ms, {} B/S]",
-        args.parties, args.parties, args.latency_ms, args.bandwidth
+        args.parties, args.threshold, args.latency_ms, args.bandwidth
     );
     let start = Instant::now();
     let results = run_protocol(latency, bandwidth, &participants, |p| {
@@ -247,7 +250,7 @@ fn main() {
                 triple0: triples[&p].clone(),
                 triple1: other_triples[&p].clone(),
                 keygen_out: shares[&p].clone(),
-                threshold: args.parties as usize,
+                threshold: args.threshold as usize,
             },
         )
         .unwrap()
@@ -260,7 +263,7 @@ fn main() {
 
     println!(
         "\nSign ({}, {}) [{} ms, {} B/S]",
-        args.parties, args.parties, args.latency_ms, args.bandwidth
+        args.parties, args.threshold, args.latency_ms, args.bandwidth
     );
     let start = Instant::now();
     let results = run_protocol(latency, bandwidth, &participants, |p| {
