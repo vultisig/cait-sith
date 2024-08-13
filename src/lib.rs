@@ -128,6 +128,8 @@ mod serde;
 mod sign;
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_mpc;
 pub mod triples;
 
 pub use compat::CSCurve;
