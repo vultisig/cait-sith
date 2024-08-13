@@ -237,4 +237,43 @@ pub(crate) fn run_two_party_protocol<T0: std::fmt::Debug, T1: std::fmt::Debug>(
     Ok((out0.unwrap(), out1.unwrap()))
 }
 
+
+
+pub fn run_protocol_mpc<T>(
+    mut ps: Vec<(Participant, Box<dyn Protocol<Output = T>>)>,
+    size: usize,
+    i: usize,
+    indices: HashMap<Participant, usize>,
+    out: Vec<(Participant, T)>,
+) -> Result<Vec<(Participant, T)>, ProtocolError> {
+    while {
+        let action = ps[i].1.poke()?;
+        match action {
+            Action::Wait => false,
+            Action::SendMany(m) => {
+                for j in 0..size {
+                    if i == j {
+                        continue;
+                    }
+                    let from = ps[i].0;
+                    ps[j].1.message(from, m.clone());
+                }
+                true
+            }
+            Action::SendPrivate(to, m) => {
+                let from = ps[i].0;
+                ps[indices[&to]].1.message(from, m);
+                true
+            }
+            Action::Return(r) => {
+                out.push((ps[i].0, r));
+                false
+            }
+        }
+    } {}
+
+
+    Ok(out)
+}
+
 pub(crate) mod internal;

@@ -2,7 +2,9 @@ use k256::{AffinePoint, Secp256k1};
 use rand_core::OsRng;
 
 use crate::compat::scalar_hash;
-use crate::protocol::{run_protocol, Participant, Protocol};
+use crate::protocol::{run_protocol_mpc, run_protocol, Participant, Protocol};
+use std::collections::HashMap;
+
 
 
 use crate::{
@@ -148,6 +150,17 @@ fn test_e2e_mpc() {
     
     }
 
-    run_protocol(protocols).unwrap();
+    let indices: HashMap<Participant, usize> =
+    protocols.iter().enumerate().map(|(i, (p, _))| (*p, i)).collect();
+
+    let size = protocols.len();
+    let out = Vec::with_capacity(size);
+    while out.len() < size {
+        for i in 0..size {
+
+            run_protocol_mpc(protocols.clone(), size, i, indices.clone(), out.clone()).unwrap();
+
+        }
+    }
 
 }
