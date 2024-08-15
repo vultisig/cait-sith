@@ -2,8 +2,7 @@ use k256::{AffinePoint, Secp256k1};
 use rand_core::OsRng;
 
 use crate::compat::scalar_hash;
-use crate::protocol::{run_protocol_mpc, run_protocol, Participant, Protocol};
-use std::collections::HashMap;
+use crate::protocol::{run_protocol_mpc, Participant, Protocol};
 
 
 
@@ -81,8 +80,26 @@ fn test_e2e_mpc() {
         Participant::from(0u32),
         Participant::from(1u32),
         Participant::from(2u32),
+        Participant::from(3u32),
+        Participant::from(4u32),
+        Participant::from(5u32),
+        Participant::from(6u32),
+        Participant::from(7u32),
+        Participant::from(8u32),
+        Participant::from(9u32),
+        Participant::from(10u32),
+        Participant::from(11u32),
+        Participant::from(12u32),
+        Participant::from(13u32),
+        Participant::from(14u32),
+        Participant::from(15u32),
+        Participant::from(16u32),
+        Participant::from(17u32),
+        Participant::from(18u32),
+        Participant::from(19u32),
+        Participant::from(20u32)
     ];
-    let t = 3;
+    let t = 14;
 
     //#[allow(clippy::type_complexity)]
     let mut protocols: Vec<(
@@ -95,7 +112,18 @@ fn test_e2e_mpc() {
         let protocol = run_keygen_mpc(participants.clone(), t, p);
         protocols.push((participants[p], Box::new(protocol)));
     }
-    let mut keygen_result = run_protocol(protocols).unwrap();
+    //mpc protocol for dkg
+    let size = protocols.len();
+    let mut out = Vec::with_capacity(size);
+    while out.len() < size {
+        for i in 0..size {
+            println!("loop {:?} \n ", i);
+            run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
+        }
+        println!("out {:?} \n ", out);
+
+    }
+    let mut keygen_result = out;
     keygen_result.sort_by_key(|(p, _)| *p);
 
     println!("this is keygen {:?} \n", keygen_result);
@@ -128,7 +156,23 @@ fn test_e2e_mpc() {
         protocols.push((p, Box::new(protocol)));
 
     }
-    let mut presign_result = run_protocol(protocols).unwrap();
+
+    //mpc protocol for presign
+    let size = protocols.len();
+    let mut out = Vec::with_capacity(size);
+    while out.len() < size {
+        for i in 0..size {
+            println!("loop {:?} \n ", i);
+
+
+            run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
+
+        }
+        println!("out {:?} \n ", out);
+
+    }
+
+    let mut presign_result = out;
     presign_result.sort_by_key(|(p, _)| *p);
 
     println!("this is presign {:?} \n", presign_result);
@@ -150,17 +194,22 @@ fn test_e2e_mpc() {
     
     }
 
-    let indices: HashMap<Participant, usize> =
-    protocols.iter().enumerate().map(|(i, (p, _))| (*p, i)).collect();
+    //start run mpc protocol
+
+    
 
     let size = protocols.len();
-    let out = Vec::with_capacity(size);
+    let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
+            println!("loop {:?} \n ", i);
 
-            run_protocol_mpc(protocols.clone(), size, i, indices.clone(), out.clone()).unwrap();
+
+            run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
 
         }
+        println!("out {:?} \n ", out);
+
     }
 
 }

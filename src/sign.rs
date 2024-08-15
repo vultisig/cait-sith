@@ -22,7 +22,7 @@ use crate::{
 ///
 /// To support these variants, this simply gives you a normal signature, along with the entire
 /// first point.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FullSignature<C: CSCurve> {
     /// This is the entire first point.
     pub big_r: C::AffinePoint,
