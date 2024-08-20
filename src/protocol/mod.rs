@@ -150,7 +150,7 @@ pub trait Protocol {
 /// The reason this function exists is as a convenient testing utility.
 /// In practice each protocol participant is likely running on a different machine,
 /// and so orchestrating the protocol would happen differently.
-pub fn run_protocol<T>(
+pub fn run_protocol<T: std::fmt::Debug>(
     mut ps: Vec<(Participant, Box<dyn Protocol<Output = T>>)>,
 ) -> Result<Vec<(Participant, T)>, ProtocolError> {
     let indices: HashMap<Participant, usize> =
@@ -162,6 +162,7 @@ pub fn run_protocol<T>(
         for i in 0..size {
             while {
                 let action = ps[i].1.poke()?;
+                //println!("action {:?}", action);
                 match action {
                     Action::Wait => false,
                     Action::SendMany(m) => {
@@ -237,18 +238,15 @@ pub(crate) fn run_two_party_protocol<T0: std::fmt::Debug, T1: std::fmt::Debug>(
     Ok((out0.unwrap(), out1.unwrap()))
 }
 
-
-
 pub fn run_protocol_mpc<'a, T: std::fmt::Debug>(
     ps: &mut Vec<(Participant, Box<dyn Protocol<Output = T>>)>,
     size: usize,
     i: usize,
     out: &'a mut Vec<(Participant, T)>,
 ) -> Result<&'a mut Vec<(Participant, T)>, ProtocolError> {
-
     let indices: HashMap<Participant, usize> =
-    ps.iter().enumerate().map(|(i, (p, _))| (*p, i)).collect();
-    
+        ps.iter().enumerate().map(|(i, (p, _))| (*p, i)).collect();
+
     while {
         let action = ps[i].1.poke()?;
         println!("action {:?} \n ", action);
@@ -275,7 +273,6 @@ pub fn run_protocol_mpc<'a, T: std::fmt::Debug>(
             }
         }
     } {}
-
 
     Ok(out)
 }

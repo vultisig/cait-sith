@@ -1,8 +1,13 @@
-use k256::{AffinePoint, Secp256k1, Scalar};
+use k256::{AffinePoint, Scalar, Secp256k1};
 use rand_core::OsRng;
 
 use crate::{
-    compat::scalar_hash, keygen, presign, protocol::{run_protocol, Participant, Protocol}, reshare, sign, triples::{self, TriplePub, TripleShare}, FullSignature, KeygenOutput, PresignArguments, PresignOutput, CSCurve
+    compat::scalar_hash,
+    keygen, presign,
+    protocol::{run_protocol, Participant, Protocol},
+    reshare, sign,
+    triples::{self, TriplePub, TripleShare},
+    CSCurve, FullSignature, KeygenOutput, PresignArguments, PresignOutput,
 };
 
 fn run_keygen(
@@ -32,26 +37,33 @@ fn run_reshare<C: CSCurve>(
     new_threshold: usize,
 ) -> Vec<(Participant, Scalar)> {
     #[allow(clippy::type_complexity)]
+    let old_participants: Vec<_> = old_participants.into_iter().collect();
+    let old_participants_list: Vec<Participant> =
+        old_participants.iter().map(|(p, _)| *p).collect();
+    let participant_len = old_participants.len();
+    let pub_key = old_participants[0].1.public_key;
+    let mut setup: Vec<_> = old_participants
+        .into_iter()
+        .map(|(p, out)| (p, (Some(out.private_share), out.public_key)))
+        .collect();
+    setup.push((Participant::from(participant_len as u32), (None, pub_key)));
     let mut protocols: Vec<(Participant, Box<dyn Protocol<Output = Scalar>>)> =
-            Vec::with_capacity(old_participants.len());
+        Vec::with_capacity(participant_len);
 
-    let old_participants_list: Vec<Participant> = old_participants.iter().map(|(p, _)| *p).collect();
-
-    println!("here");
-
-
-    for (p, myshare) in old_participants.iter() {
-        println!("loop");
-
-        let protocol = reshare::<Secp256k1>(&old_participants_list, old_threshold, new_participants, new_threshold, *p, Some(myshare.private_share), myshare.public_key);
+    for (p, out) in setup.iter() {
+        let protocol = reshare::<Secp256k1>(
+            &old_participants_list,
+            old_threshold,
+            new_participants,
+            new_threshold,
+            *p,
+            out.0,
+            out.1,
+        );
         assert!(protocol.is_ok());
         let protocol = protocol.unwrap();
         protocols.push((*p, Box::new(protocol)));
     }
-
-    println!("here");
-
-
     run_protocol(protocols).unwrap()
 }
 
@@ -92,6 +104,7 @@ fn run_presign(
         assert!(protocol.is_ok());
         let protocol = protocol.unwrap();
         protocols.push((p, Box::new(protocol)));
+        println!("protocl box");
     }
 
     run_protocol(protocols).unwrap()
@@ -153,54 +166,52 @@ fn test_e2e() {
     run_sign(presign_result, public_key, msg);
 }
 
-
 #[test]
 fn test_e2e_reshare() {
     let participants = vec![
         Participant::from(0u32),
         Participant::from(1u32),
         Participant::from(2u32),
+        Participant::from(3u32),
     ];
     let t = 3;
+    let new_t = 3;
 
     println!("start");
 
-    let mut keygen_result = run_keygen(participants.clone(), t);
+    let mut keygen_result = run_keygen(participants[..3].to_vec(), t);
     keygen_result.sort_by_key(|(p, _)| *p);
 
     let public_key = keygen_result[0].1.public_key;
     assert_eq!(keygen_result[0].1.public_key, keygen_result[1].1.public_key);
     assert_eq!(keygen_result[1].1.public_key, keygen_result[2].1.public_key);
 
-    let new_participants = vec![
-        Participant::from(0u32),
-        Participant::from(1u32),
-        Participant::from(2u32),
-        Participant::from(3u32),
-    ];
-    let new_t = 2;
-
-    println!("here");
-
-    let reshare_result = run_reshare::<Secp256k1>(keygen_result, t, &new_participants, new_t);
+    let mut reshare_result = run_reshare::<Secp256k1>(keygen_result, t, &participants, new_t);
     println!("end reshare");
+    reshare_result.sort_by_key(|(p, _)| *p);
 
     let presign_input: Vec<(Participant, KeygenOutput<Secp256k1>)> = reshare_result
-    .into_iter()
-    .map(|(p, scalar)| (p, KeygenOutput {
-        private_share: scalar,
-        public_key,
-        // Add other fields if necessary
-    }))
-    .collect();
-
-    println!("here");
-
+        .into_iter()
+        .map(|(p, scalar)| {
+            (
+                p,
+                KeygenOutput {
+                    private_share: scalar,
+                    public_key,
+                    // Add other fields if necessary
+                },
+            )
+        })
+        .collect();
 
     let (pub0, shares0) = triples::deal(&mut OsRng, &participants, t);
     let (pub1, shares1) = triples::deal(&mut OsRng, &participants, t);
 
+    println!("end triples");
+
     let mut presign_result = run_presign(presign_input, shares0, shares1, &pub0, &pub1, t);
+    println!("end presign");
+
     presign_result.sort_by_key(|(p, _)| *p);
 
     let msg = b"hello world";

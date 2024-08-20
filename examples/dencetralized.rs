@@ -7,10 +7,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use structopt::StructOpt;
-
-
 
 use cait_sith::{
     keygen, presign,
@@ -57,22 +55,41 @@ fn main() {
     let (senders, receivers) = setup_network(&participants, this_participant, args.base_port);
 
     // Run the protocol
-    run_protocol(this_participant, &participants, args.threshold as usize, senders, receivers);
+    run_protocol(
+        this_participant,
+        &participants,
+        args.threshold as usize,
+        senders,
+        receivers,
+    );
 }
 
-fn setup_network(participants: &[Participant], this_participant: Participant, base_port: u16) 
-    -> (HashMap<Participant, Arc<Mutex<TcpStream>>>, HashMap<Participant, Arc<Mutex<TcpStream>>>)
-{
+fn setup_network(
+    participants: &[Participant],
+    this_participant: Participant,
+    base_port: u16,
+) -> (
+    HashMap<Participant, Arc<Mutex<TcpStream>>>,
+    HashMap<Participant, Arc<Mutex<TcpStream>>>,
+) {
     let mut senders = HashMap::new();
     let mut receivers = HashMap::new();
 
     // Start listener for incoming connections
-    let listener = TcpListener::bind(format!("127.0.0.1:{}", base_port + this_participant.0 as u16)).unwrap();
+    let listener = TcpListener::bind(format!(
+        "127.0.0.1:{}",
+        base_port + this_participant.0 as u16
+    ))
+    .unwrap();
 
     // Connect to participants with lower IDs
     for &participant in participants.iter().filter(|&&p| p < this_participant) {
-        let stream = TcpStream::connect(format!("127.0.0.1:{}", base_port + participant.0 as u16)).unwrap();
-        senders.insert(participant, Arc::new(Mutex::new(stream.try_clone().unwrap())));
+        let stream =
+            TcpStream::connect(format!("127.0.0.1:{}", base_port + participant.0 as u16)).unwrap();
+        senders.insert(
+            participant,
+            Arc::new(Mutex::new(stream.try_clone().unwrap())),
+        );
         receivers.insert(participant, Arc::new(Mutex::new(stream)));
     }
 
@@ -80,7 +97,10 @@ fn setup_network(participants: &[Participant], this_participant: Participant, ba
     for _ in participants.iter().filter(|&&p| p > this_participant) {
         let (stream, _) = listener.accept().unwrap();
         let participant = Participant::from(stream.peer_addr().unwrap().port() - base_port);
-        senders.insert(participant, Arc::new(Mutex::new(stream.try_clone().unwrap())));
+        senders.insert(
+            participant,
+            Arc::new(Mutex::new(stream.try_clone().unwrap())),
+        );
         receivers.insert(participant, Arc::new(Mutex::new(stream)));
     }
 
@@ -97,7 +117,8 @@ fn run_protocol(
     // Triple generation
     println!("Starting Triple Gen");
     let start = Instant::now();
-    let triple = triples::generate_triple::<Secp256k1>(participants, this_participant, threshold).unwrap();
+    let triple =
+        triples::generate_triple::<Secp256k1>(participants, this_participant, threshold).unwrap();
     println!("Triple Gen completed in {:?}", start.elapsed());
 
     // Key generation
@@ -120,7 +141,8 @@ fn run_protocol(
             keygen_out: share.clone(),
             threshold,
         },
-    ).unwrap();
+    )
+    .unwrap();
     println!("Presign completed in {:?}", start.elapsed());
 
     // Signing
@@ -132,7 +154,8 @@ fn run_protocol(
         share.public_key,
         presign_out,
         scalar_hash(b"hello world"),
-    ).unwrap();
+    )
+    .unwrap();
     println!("Sign completed in {:?}", start.elapsed());
 
     println!("Protocol completed successfully!");

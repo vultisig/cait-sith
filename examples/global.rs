@@ -1,35 +1,36 @@
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
-use std::time::Duration;
 use digest::{Digest, FixedOutput};
 use easy_parallel::Parallel;
 use ecdsa::hazmat::DigestPrimitive;
 use elliptic_curve::{ops::Reduce, Curve};
 use haisou_chan::{channel, Bandwidth};
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+use std::time::Duration;
 
 use k256::{FieldBytes, Scalar, Secp256k1};
 use rand_core::OsRng;
 use structopt::StructOpt;
 
-
 #[derive(Debug, StructOpt)]
 struct Args {
     /// The number of parties to run the benchmarks with.
     parties: u32,
-    //threshold 
+    //threshold
     threshold: u32,
     /// The latency, in milliseconds.
     latency_ms: u32,
     /// The bandwidth, in bytes per second.
     bandwidth: u32,
-    
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() != 4 {
-        eprintln!("Usage: {} <participant_id> <total_participants> <initial_number>", args[0]);
+        eprintln!(
+            "Usage: {} <participant_id> <total_participants> <initial_number>",
+            args[0]
+        );
         eprintln!("  participant_id: 1 to n");
         eprintln!("  total_participants: total number of participants");
         eprintln!("  initial_number: starting number for the protocol");
@@ -37,11 +38,18 @@ fn main() {
     }
 
     let participant_id: usize = args[1].parse().expect("Participant ID must be a number");
-    let total_participants: usize = args[2].parse().expect("Total participants must be a number");
-    let initial_number: f64 = args[3].parse().expect("Initial number must be a valid float");
+    let total_participants: usize = args[2]
+        .parse()
+        .expect("Total participants must be a number");
+    let initial_number: f64 = args[3]
+        .parse()
+        .expect("Initial number must be a valid float");
 
     if participant_id < 1 || participant_id > total_participants {
-        eprintln!("Invalid participant ID. Must be between 1 and {}", total_participants);
+        eprintln!(
+            "Invalid participant ID. Must be between 1 and {}",
+            total_participants
+        );
         std::process::exit(1);
     }
 
@@ -64,7 +72,7 @@ fn run_protocol(id: usize, total: usize, initial: f64) {
     }
 
     // Accept connections from participants with higher IDs
-    for _ in id+1..=total {
+    for _ in id + 1..=total {
         let (stream, _) = listener.accept().expect("Failed to accept connection");
         connections.push(stream);
     }
@@ -80,12 +88,16 @@ fn run_protocol(id: usize, total: usize, initial: f64) {
             // It's our turn to send
             println!("Sending number: {}", number);
             for stream in &mut streams {
-                stream.write_all(&number.to_le_bytes()).expect("Failed to send number");
+                stream
+                    .write_all(&number.to_le_bytes())
+                    .expect("Failed to send number");
             }
         } else {
             // Receive from the current participant
             let mut buffer = [0u8; 8];
-            streams[round].read_exact(&mut buffer).expect("Failed to receive number");
+            streams[round]
+                .read_exact(&mut buffer)
+                .expect("Failed to receive number");
             number = f64::from_le_bytes(buffer);
             println!("Received number: {}", number);
         }

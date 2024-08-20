@@ -149,12 +149,8 @@ mod test {
                 (p, a_i, b_i)
             })
             .collect();
-        let a = prep
-            .iter()
-            .fold(Scalar::ZERO, |acc, (_, a_i, _)| acc + a_i);
-        let b = prep
-            .iter()
-            .fold(Scalar::ZERO, |acc, (_, _, b_i)| acc + b_i);
+        let a = prep.iter().fold(Scalar::ZERO, |acc, (_, a_i, _)| acc + a_i);
+        let b = prep.iter().fold(Scalar::ZERO, |acc, (_, _, b_i)| acc + b_i);
 
         let mut protocols: Vec<(Participant, Box<dyn Protocol<Output = Scalar>>)> =
             Vec::with_capacity(prep.len());

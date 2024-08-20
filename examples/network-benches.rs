@@ -28,13 +28,12 @@ fn scalar_hash(msg: &[u8]) -> Scalar {
 struct Args {
     /// The number of parties to run the benchmarks with.
     parties: u32,
-    //threshold 
+    //threshold
     threshold: u32,
     /// The latency, in milliseconds.
     latency_ms: u32,
     /// The bandwidth, in bytes per second.
     bandwidth: u32,
-    
 }
 
 #[derive(Debug, Clone, Copy)]

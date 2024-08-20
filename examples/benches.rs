@@ -28,9 +28,8 @@ fn scalar_hash(msg: &[u8]) -> Scalar {
 struct Args {
     /// The number of parties to run the benchmarks with.
     parties: u32,
-    //threshold 
+    //threshold
     threshold: u32,
-    
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -39,10 +38,7 @@ struct Stats {
     received: usize,
 }
 
-fn run_protocol<T, F, P>(
-    participants: &[Participant],
-    f: F,
-) -> Vec<(Participant, Stats, T)>
+fn run_protocol<T, F, P>(participants: &[Participant], f: F) -> Vec<(Participant, Stats, T)>
 where
     F: Fn(Participant) -> P + Send + Sync,
     P: Protocol<Output = T>,
@@ -190,10 +186,7 @@ fn main() {
         .map(|p| Participant::from(p as u32))
         .collect();
 
-    println!(
-        "\nTriple Gen, {}",
-        args.parties
-    );
+    println!("\nTriple Gen, {}", args.parties);
     let start = Instant::now();
     let results = run_protocol(&participants, |p| {
         triples::generate_triple::<Secp256k1>(&participants, p, args.threshold as usize).unwrap()
@@ -204,10 +197,7 @@ fn main() {
 
     let triples: HashMap<_, _> = results.into_iter().map(|(p, _, out)| (p, out)).collect();
 
-    println!(
-        "\nKeygen ({}, {})",
-        args.parties, args.threshold
-    );
+    println!("\nKeygen ({}, {})", args.parties, args.threshold);
     let start = Instant::now();
     let results = run_protocol(&participants, |p| {
         keygen(&participants, p, args.threshold as usize).unwrap()
@@ -226,10 +216,7 @@ fn main() {
         .map(|(p, share)| (p, (share, other_triples_pub.clone())))
         .collect();
 
-    println!(
-        "\nPresign ({}, {})",
-        args.parties, args.threshold
-    );
+    println!("\nPresign ({}, {})", args.parties, args.threshold);
     let start = Instant::now();
     let results = run_protocol(&participants, |p| {
         presign(
@@ -250,10 +237,7 @@ fn main() {
 
     let presignatures: HashMap<_, _> = results.into_iter().map(|(p, _, out)| (p, out)).collect();
 
-    println!(
-        "\nSign ({}, {})",
-        args.parties, args.threshold
-    );
+    println!("\nSign ({}, {})", args.parties, args.threshold);
     let start = Instant::now();
     let results = run_protocol(&participants, |p| {
         sign(
