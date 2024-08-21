@@ -162,7 +162,7 @@ pub fn run_protocol<T: std::fmt::Debug>(
         for i in 0..size {
             while {
                 let action = ps[i].1.poke()?;
-                //println!("action {:?}", action);
+                println!("action {:?}", action);
                 match action {
                     Action::Wait => false,
                     Action::SendMany(m) => {
@@ -187,6 +187,50 @@ pub fn run_protocol<T: std::fmt::Debug>(
                 }
             } {}
         }
+    }
+
+    Ok(out)
+}
+
+pub fn run_protocol_todelete<T: std::fmt::Debug>(
+    mut ps: Vec<(Participant, Box<dyn Protocol<Output = T>>)>,
+) -> Result<Vec<(Participant, T)>, ProtocolError> {
+    let indices: HashMap<Participant, usize> =
+        ps.iter().enumerate().map(|(i, (p, _))| (*p, i)).collect();
+
+    let size = ps.len();
+    let mut out = Vec::with_capacity(size);
+    let mut k = 0;
+    while out.len() < size && k < 30 {
+        for i in 0..size {
+            while {
+                let action = ps[i].1.poke()?;
+                println!("action {:?}", action);
+                match action {
+                    Action::Wait => false,
+                    Action::SendMany(m) => {
+                        for j in 0..size {
+                            if i == j {
+                                continue;
+                            }
+                            let from = ps[i].0;
+                            ps[j].1.message(from, m.clone());
+                        }
+                        true
+                    }
+                    Action::SendPrivate(to, m) => {
+                        let from = ps[i].0;
+                        ps[indices[&to]].1.message(from, m);
+                        true
+                    }
+                    Action::Return(r) => {
+                        out.push((ps[i].0, r));
+                        false
+                    }
+                }
+            } {}
+        }
+        k = k + 1;
     }
 
     Ok(out)

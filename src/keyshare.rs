@@ -43,16 +43,30 @@ async fn do_keyshare<C: CSCurve>(
     let (my_commitment, my_randomizer) = commit(&mut rng, &big_f);
 
     // Spec 1.6
+    println!("before sending first many");
+
     let wait0 = chan.next_waitpoint();
+    println!("sending first many");
     chan.send_many(wait0, &my_commitment).await;
+    println!("after sending first many");
 
     // Spec 2.1
     let mut all_commitments = ParticipantMap::new(&participants);
+    //println!("all commitments before while  {:?} ", all_commitments);
+
     all_commitments.put(me, my_commitment);
+    //println!("before spec 2.1");
     while !all_commitments.full() {
+        //println!("while ");
         let (from, commitment) = chan.recv(wait0).await?;
+        //println!("while waiting ");
+
+        //println!("all commitments in while {:?} ", all_commitments);
+
         all_commitments.put(from, commitment);
     }
+
+    println!("spec 2.1 done");
 
     // Spec 2.2
     let my_confirmation = hash(&all_commitments);
@@ -61,7 +75,11 @@ async fn do_keyshare<C: CSCurve>(
     transcript.message(b"confirmation", my_confirmation.as_ref());
 
     // Spec 2.4
+    println!("before sending second many");
+
     let wait1 = chan.next_waitpoint();
+    println!("sending second many");
+
     chan.send_many(wait1, &my_confirmation).await;
 
     // Spec 2.5
@@ -80,6 +98,8 @@ async fn do_keyshare<C: CSCurve>(
 
     // Spec 2.6
     let wait2 = chan.next_waitpoint();
+    println!("sending third many");
+
     chan.send_many(wait2, &(&big_f, &my_randomizer, my_phi_proof))
         .await;
 
@@ -87,7 +107,10 @@ async fn do_keyshare<C: CSCurve>(
     let wait3 = chan.next_waitpoint();
     for p in participants.others(me) {
         let x_i_j: ScalarPrimitive<C> = f.evaluate(&p.scalar::<C>()).into();
+        println!("sending first private");
+
         chan.send_private(wait3, p, &x_i_j).await;
+        println!("after sending first private");
     }
     let mut x_i = f.evaluate(&me.scalar::<C>());
 
@@ -259,6 +282,93 @@ async fn do_reshare<C: CSCurve>(
     Ok(private_share)
 }
 
+async fn do_reshare_keygen_output<C: CSCurve>(
+    chan: SharedChannel,
+    participants: ParticipantList,
+    old_subset: ParticipantList,
+    me: Participant,
+    threshold: usize,
+    my_share: Option<C::Scalar>,
+    public_key: C::AffinePoint,
+) -> Result<KeygenOutput<C>, ProtocolError> {
+    let s_i = my_share
+        .map(|x_i| old_subset.lagrange::<C>(me) * x_i)
+        .unwrap_or(C::Scalar::ZERO);
+    let big_s: C::ProjectivePoint = public_key.into();
+    let (private_share, _) =
+        do_keyshare::<C>(chan, participants, me, threshold, s_i, Some(big_s)).await?;
+    Ok(KeygenOutput {
+        private_share,
+        public_key: public_key,
+    })
+}
+
+pub fn reshare_keygen_output<C: CSCurve>(
+    old_participants: &[Participant],
+    old_threshold: usize,
+    new_participants: &[Participant],
+    new_threshold: usize,
+    me: Participant,
+    my_share: Option<C::Scalar>,
+    public_key: C::AffinePoint,
+) -> Result<impl Protocol<Output = KeygenOutput<C>>, InitializationError> {
+    if new_participants.len() < 2 {
+        return Err(InitializationError::BadParameters(format!(
+            "participant count cannot be < 2, found: {}",
+            new_participants.len()
+        )));
+    };
+    // Spec 1.1
+    if new_threshold > new_participants.len() {
+        return Err(InitializationError::BadParameters(
+            "threshold must be <= participant count".to_string(),
+        ));
+    }
+
+    let new_participants = ParticipantList::new(new_participants).ok_or_else(|| {
+        InitializationError::BadParameters(
+            "new participant list cannot contain duplicates".to_string(),
+        )
+    })?;
+
+    if !new_participants.contains(me) {
+        return Err(InitializationError::BadParameters(
+            "new participant list must contain this participant".to_string(),
+        ));
+    }
+
+    let old_participants = ParticipantList::new(old_participants).ok_or_else(|| {
+        InitializationError::BadParameters(
+            "old participant list cannot contain duplicates".to_string(),
+        )
+    })?;
+
+    let old_subset = old_participants.intersection(&new_participants);
+    if old_subset.len() < old_threshold {
+        return Err(InitializationError::BadParameters(
+            "not enough old participants to reconstruct private key for resharing".to_string(),
+        ));
+    }
+
+    if old_subset.contains(me) && my_share.is_none() {
+        return Err(InitializationError::BadParameters(
+            "this party is present in the old participant list but provided no share".to_string(),
+        ));
+    }
+
+    let ctx = Context::new();
+    let fut = do_reshare_keygen_output::<C>(
+        ctx.shared_channel(),
+        new_participants,
+        old_subset,
+        me,
+        new_threshold,
+        my_share,
+        public_key,
+    );
+    Ok(make_protocol(ctx, fut))
+}
+
 /// The resharing protocol.
 ///
 /// The purpose of this protocol is to take a key generated with one set of participants,
@@ -364,7 +474,7 @@ mod test {
     use k256::{ProjectivePoint, Scalar, Secp256k1};
 
     use super::*;
-    use crate::protocol::{run_protocol, Participant};
+    use crate::protocol::{run_protocol, run_protocol_todelete, Participant};
 
     #[allow(clippy::type_complexity)]
     fn do_keygen(
@@ -466,12 +576,15 @@ mod test {
             Participant::from(3u32),
             //Participant::from(4u32),
         ];
-        let threshold0 = 3;
-        let threshold1 = 4;
+        let old_participants = &participants[..2];
+        let threshold0 = 2;
+        let threshold1 = 3;
 
-        let result0 = do_keygen(&participants[..3], threshold0)?;
+        let result0 = do_keygen(old_participants, threshold0)?;
 
-        let pub_key = result0[2].1.public_key;
+        println!("keygen done");
+
+        let pub_key = result0[1].1.public_key;
 
         // Reshare
         let mut setup: Vec<_> = result0
@@ -484,8 +597,10 @@ mod test {
             Vec::with_capacity(participants.len());
 
         for (p, out) in setup.iter() {
+            println!("reshare start");
+
             let protocol = reshare::<Secp256k1>(
-                &participants[..3],
+                old_participants,
                 threshold0,
                 &participants,
                 threshold1,
@@ -496,10 +611,83 @@ mod test {
             protocols.push((*p, Box::new(protocol)));
         }
 
+        println!("reshare done");
+
         let result1 = run_protocol(protocols)?;
+
+        println!("protocol done");
 
         let participants = vec![result1[0].0, result1[1].0, result1[2].0, result1[3].0];
         let shares = vec![result1[0].1, result1[1].1, result1[2].1, result1[3].1];
+        let p_list = ParticipantList::new(&participants).unwrap();
+        let x = p_list.lagrange::<Secp256k1>(participants[0]) * shares[0]
+            + p_list.lagrange::<Secp256k1>(participants[1]) * shares[1]
+            + p_list.lagrange::<Secp256k1>(participants[2]) * shares[2]
+            + p_list.lagrange::<Secp256k1>(participants[3]) * shares[3];
+        assert_eq!(ProjectivePoint::GENERATOR * x, pub_key);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_reshare_keygen_output() -> Result<(), Box<dyn Error>> {
+        let participants = vec![
+            Participant::from(0u32),
+            Participant::from(1u32),
+            Participant::from(2u32),
+            Participant::from(3u32),
+            Participant::from(4u32),
+        ];
+        let old_participants = &participants[..3];
+        let threshold0 = 2;
+        let threshold1 = 3;
+
+        let result0 = do_keygen(old_participants, threshold0)?;
+
+        println!("keygen done");
+
+        let pub_key = result0[1].1.public_key;
+
+        // Reshare
+        let mut setup: Vec<_> = result0
+            .into_iter()
+            .map(|(p, out)| (p, (Some(out.private_share), out.public_key)))
+            .collect();
+        setup.push((Participant::from(3u32), (None, pub_key)));
+
+        let mut protocols: Vec<(
+            Participant,
+            Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
+        )> = Vec::with_capacity(participants.len());
+
+        for (p, out) in setup.iter() {
+            println!("reshare start");
+
+            let protocol = reshare_keygen_output::<Secp256k1>(
+                old_participants,
+                threshold0,
+                &participants,
+                threshold1,
+                *p,
+                out.0,
+                out.1,
+            )?;
+            protocols.push((*p, Box::new(protocol)));
+        }
+
+        println!("reshare done");
+
+        let result1 = run_protocol_todelete(protocols)?;
+
+        println!("protocol done");
+
+        let participants = vec![result1[0].0, result1[1].0, result1[2].0, result1[3].0];
+        let shares = vec![
+            result1[0].1.private_share,
+            result1[1].1.private_share,
+            result1[2].1.private_share,
+            result1[3].1.private_share,
+        ];
         let p_list = ParticipantList::new(&participants).unwrap();
         let x = p_list.lagrange::<Secp256k1>(participants[0]) * shares[0]
             + p_list.lagrange::<Secp256k1>(participants[1]) * shares[1]
