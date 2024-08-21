@@ -249,7 +249,7 @@ pub fn run_protocol_mpc<'a, T: std::fmt::Debug>(
 
     while {
         let action = ps[i].1.poke()?;
-        println!("action {:?} \n ", action);
+        //println!("action {:?} \n ", action);
         match action {
             Action::Wait => false,
             Action::SendMany(m) => {

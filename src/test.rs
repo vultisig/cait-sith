@@ -30,7 +30,7 @@ fn run_keygen(
     run_protocol(protocols).unwrap()
 }
 
-fn run_reshare<C: CSCurve>(
+pub fn run_reshare<C: CSCurve>(
     old_participants: Vec<(Participant, KeygenOutput<Secp256k1>)>,
     old_threshold: usize,
     new_participants: &[Participant],
@@ -173,6 +173,7 @@ fn test_e2e_reshare() {
         Participant::from(1u32),
         Participant::from(2u32),
         Participant::from(3u32),
+        //Participant::from(4u32),
     ];
     let t = 3;
     let new_t = 3;
@@ -198,7 +199,6 @@ fn test_e2e_reshare() {
                 KeygenOutput {
                     private_share: scalar,
                     public_key,
-                    // Add other fields if necessary
                 },
             )
         })

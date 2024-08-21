@@ -464,6 +464,7 @@ mod test {
             Participant::from(1u32),
             Participant::from(2u32),
             Participant::from(3u32),
+            //Participant::from(4u32),
         ];
         let threshold0 = 3;
         let threshold1 = 4;

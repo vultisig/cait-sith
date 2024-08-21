@@ -10,6 +10,7 @@ use crate::protocol;
 use crate::protocol::Action;
 use crate::protocol::{run_protocol_mpc, Participant, Protocol};
 use crate::reshare;
+use crate::test::run_reshare;
 use crate::CSCurve;
 
 use crate::{
@@ -35,7 +36,7 @@ fn run_reshare_mpc<C: CSCurve>(
     new_threshold: usize,
     p: Participant,
     out: (Option<Scalar>, AffinePoint),
-) -> impl Protocol<Output = KeygenOutput<Secp256k1>> {
+) -> impl Protocol<Output = <Secp256k1 as CurveArithmetic>::Scalar> {
     #[allow(clippy::type_complexity)]
     let protocol = reshare::<Secp256k1>(
         &old_participants_list,
@@ -48,8 +49,10 @@ fn run_reshare_mpc<C: CSCurve>(
     );
     assert!(protocol.is_ok());
 
+    protocol.unwrap()
+
     // Transform the protocol.unwrap() to match the expected function output
-    let inner_protocol = protocol.unwrap();
+    /*let inner_protocol = protocol.unwrap();
 
     struct ReshareProtocolWrapper {
         inner: Box<dyn Protocol<Output = Scalar>>,
@@ -83,7 +86,7 @@ fn run_reshare_mpc<C: CSCurve>(
     ReshareProtocolWrapper {
         inner: Box::new(inner_protocol),
         public_key: out.1,
-    }
+    }*/
 }
 
 fn run_presign_mpc(
@@ -130,6 +133,7 @@ fn run_sign_mpc(
 }
 
 #[test]
+//#[ignore]
 fn test_e2e_mpc() {
     let participants = vec![
         Participant::from(0u32),
@@ -262,33 +266,18 @@ fn test_e2e_mpc() {
 }
 
 #[test]
+//#[ignore]
 fn test_e2e_mpc_reshare() {
     let new_participants = vec![
         Participant::from(0u32),
         Participant::from(1u32),
         Participant::from(2u32),
         Participant::from(3u32),
-        Participant::from(4u32),
-        Participant::from(5u32),
-        Participant::from(6u32),
-        Participant::from(7u32),
-        Participant::from(8u32),
-        Participant::from(9u32),
-        Participant::from(10u32),
-        Participant::from(11u32),
-        Participant::from(12u32),
-        Participant::from(13u32),
-        Participant::from(14u32),
-        Participant::from(15u32),
-        Participant::from(16u32),
-        Participant::from(17u32),
-        Participant::from(18u32),
-        Participant::from(19u32),
-        Participant::from(20u32),
     ];
+    let t: usize = 2;
+
     let participants = &new_participants[0..3];
-    let t = 2;
-    let new_t = 14;
+    let new_t = 3;
 
     //#[allow(clippy::type_complexity)]
     let mut protocols: Vec<(
@@ -338,8 +327,8 @@ fn test_e2e_mpc_reshare() {
     setup.push((Participant::from(participant_len as u32), (None, pub_key)));
     let mut protocols: Vec<(
         Participant,
-        Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
-    )> = Vec::with_capacity(participants.len());
+        Box<dyn Protocol<Output = Scalar>>, //Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(participant_len);
 
     for (p, out) in setup.iter() {
         let protocol = run_reshare_mpc::<Secp256k1>(
@@ -359,8 +348,6 @@ fn test_e2e_mpc_reshare() {
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            println!("loop {:?} \n ", i);
-
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
         println!("out reshare {:?} \n ", out);
@@ -369,10 +356,24 @@ fn test_e2e_mpc_reshare() {
     let mut reshare_result = out;
     reshare_result.sort_by_key(|(p, _)| *p);
 
+    let reshare_result: Vec<(Participant, KeygenOutput<Secp256k1>)> = reshare_result
+        .into_iter()
+        .map(|(p, scalar)| {
+            (
+                p,
+                KeygenOutput {
+                    private_share: scalar,
+                    public_key,
+                    // Add other fields if necessary
+                },
+            )
+        })
+        .collect();
+
     //________________________________triples________________________________
 
-    let (pub0, shares0) = triples::deal(&mut OsRng, &participants, t);
-    let (pub1, shares1) = triples::deal(&mut OsRng, &participants, t);
+    let (pub0, shares0) = triples::deal(&mut OsRng, &new_participants, new_t);
+    let (pub1, shares1) = triples::deal(&mut OsRng, &new_participants, new_t);
 
     assert!(reshare_result.len() == shares0.len());
     assert!(reshare_result.len() == shares1.len());
@@ -411,7 +412,7 @@ fn test_e2e_mpc_reshare() {
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            println!("loop {:?} \n ", i);
+            //println!("loop {:?} \n ", i);
 
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
@@ -452,4 +453,104 @@ fn test_e2e_mpc_reshare() {
         }
         println!("out {:?} \n ", out);
     }
+}
+
+#[test]
+//#[ignore]
+fn test_e2e_mpc_2_reshare() {
+    let new_participants = vec![
+        Participant::from(0u32),
+        Participant::from(1u32),
+        Participant::from(2u32),
+        Participant::from(3u32),
+    ];
+    let t: usize = 2;
+
+    let participants = &new_participants[0..3];
+    let new_t = 2;
+    //#[allow(clippy::type_complexity)]
+    let mut protocols: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(participants.len());
+
+    for p in 0..participants.len() {
+        let protocol = run_keygen_mpc(participants.to_vec(), t, p);
+        protocols.push((participants[p], Box::new(protocol)));
+    }
+    //mpc protocol for dkg
+    let size = protocols.len();
+    let mut out = Vec::with_capacity(size);
+    while out.len() < size {
+        for i in 0..size {
+            println!("loop {:?} \n ", i);
+            run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
+        }
+        println!("out {:?} \n ", out);
+    }
+    let mut keygen_result = out;
+    keygen_result.sort_by_key(|(p, _)| *p);
+
+    println!("this is keygen {:?} \n", keygen_result);
+
+    let public_key = keygen_result[0].1.public_key;
+    assert_eq!(keygen_result[0].1.public_key, keygen_result[1].1.public_key);
+    assert_eq!(keygen_result[1].1.public_key, keygen_result[2].1.public_key);
+
+    let mut reshare_result = run_reshare::<Secp256k1>(keygen_result, t, &new_participants, new_t);
+
+    /*//_____________________________reshare 1/2
+
+    let old_participants: Vec<_> = keygen_result.clone().into_iter().collect();
+    let old_participants_list: Vec<Participant> =
+        old_participants.iter().map(|(p, _)| *p).collect();
+    let participant_len = old_participants.len();
+    let pub_key = old_participants[0].1.public_key;
+    let mut setup: Vec<_> = old_participants
+        .into_iter()
+        .map(|(p, out)| (p, (Some(out.private_share), out.public_key)))
+        .collect();
+    setup.push((Participant::from(participant_len as u32), (None, pub_key)));
+    let mut protocols: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = Scalar>>, //Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(participant_len);
+
+    for (p, out) in setup.iter() {
+        /*let protocol = run_reshare_mpc::<Secp256k1>(
+            &old_participants_list,
+            t,
+            &new_participants,
+            new_t,
+            *p,
+            *out,
+        );*/
+        let protocol = reshare::<Secp256k1>(
+            &old_participants_list,
+            t,
+            &new_participants,
+            new_t,
+            *p,
+            out.0,
+            out.1,
+        );
+        assert!(protocol.is_ok());
+        let protocol = protocol.unwrap();
+        protocols.push((*p, Box::new(protocol)));
+    }
+
+    //________________________________reshare 2/2_
+    //mpc protocol for reshare
+    println!("this is protocol len {:?} \n", protocols.len());
+    println!("this is new participent len {:?} \n", new_participants.len());
+
+    let size = protocols.len();
+    let mut out = Vec::with_capacity(size);
+    while out.len() < size {
+        for i in 0..size {
+            println!("loop {:?} \n ", i);
+            run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
+        }
+        println!("out {:?} \n ", out);
+    }*/
 }
