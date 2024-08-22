@@ -41,32 +41,37 @@ async fn do_keyshare<C: CSCurve>(
 
     // Spec 1.5
     let (my_commitment, my_randomizer) = commit(&mut rng, &big_f);
+    //println!("my commitments {:?}", my_commitment);
+
 
     // Spec 1.6
-    println!("before sending first many");
-
     let wait0 = chan.next_waitpoint();
-    println!("sending first many");
     chan.send_many(wait0, &my_commitment).await;
     println!("after sending first many");
 
+
     // Spec 2.1
     let mut all_commitments = ParticipantMap::new(&participants);
+    println!("this is len of participants {:?}", participants.len());
     //println!("all commitments before while  {:?} ", all_commitments);
 
     all_commitments.put(me, my_commitment);
-    //println!("before spec 2.1");
+    println!("before spec 2.1");
     while !all_commitments.full() {
         //println!("while ");
         let (from, commitment) = chan.recv(wait0).await?;
         //println!("while waiting ");
 
-        //println!("all commitments in while {:?} ", all_commitments);
+
+        println!("all commitments in while : \n  {:?} \n ", all_commitments);
 
         all_commitments.put(from, commitment);
+        println!("bool{:?} ", all_commitments.full());
+
     }
 
     println!("spec 2.1 done");
+
 
     // Spec 2.2
     let my_confirmation = hash(&all_commitments);
@@ -111,6 +116,7 @@ async fn do_keyshare<C: CSCurve>(
 
         chan.send_private(wait3, p, &x_i_j).await;
         println!("after sending first private");
+
     }
     let mut x_i = f.evaluate(&me.scalar::<C>());
 
@@ -576,9 +582,9 @@ mod test {
             Participant::from(3u32),
             //Participant::from(4u32),
         ];
-        let old_participants = &participants[..2];
-        let threshold0 = 2;
-        let threshold1 = 3;
+        let old_participants = &participants[..3];
+        let threshold0 = 3;
+        let threshold1 = 4;
 
         let result0 = do_keygen(old_participants, threshold0)?;
 
@@ -637,14 +643,23 @@ mod test {
             Participant::from(2u32),
             Participant::from(3u32),
             Participant::from(4u32),
+            /*Participant::from(5u32),
+            Participant::from(6u32),
+            Participant::from(7u32),
+            Participant::from(8u32),*/
+
+
         ];
         let old_participants = &participants[..3];
-        let threshold0 = 2;
-        let threshold1 = 3;
+        println!("this is participant content {:?}", old_participants);
+        let threshold0 = 3;
+        let threshold1 = 4;
 
         let result0 = do_keygen(old_participants, threshold0)?;
 
+
         println!("keygen done");
+        //println!("keygen done {:?}", result0);
 
         let pub_key = result0[1].1.public_key;
 
@@ -653,7 +668,12 @@ mod test {
             .into_iter()
             .map(|(p, out)| (p, (Some(out.private_share), out.public_key)))
             .collect();
-        setup.push((Participant::from(3u32), (None, pub_key)));
+        setup.push((Participant::from((participants.len()-1) as u32), (None, pub_key)));
+        setup.push((Participant::from((participants.len()-2) as u32), (None, pub_key)));
+
+
+        println!("setup done {:?}", setup);
+
 
         let mut protocols: Vec<(
             Participant,
@@ -662,6 +682,10 @@ mod test {
 
         for (p, out) in setup.iter() {
             println!("reshare start");
+            println!("new participants list {:?}", participants);
+            println!("me {:?}", p);
+
+
 
             let protocol = reshare_keygen_output::<Secp256k1>(
                 old_participants,

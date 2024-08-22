@@ -162,7 +162,7 @@ pub fn run_protocol<T: std::fmt::Debug>(
         for i in 0..size {
             while {
                 let action = ps[i].1.poke()?;
-                println!("action {:?}", action);
+                //println!("action {:?}", action);
                 match action {
                     Action::Wait => false,
                     Action::SendMany(m) => {
@@ -205,7 +205,7 @@ pub fn run_protocol_todelete<T: std::fmt::Debug>(
         for i in 0..size {
             while {
                 let action = ps[i].1.poke()?;
-                println!("action {:?}", action);
+                //println!("action {:?}", action);
                 match action {
                     Action::Wait => false,
                     Action::SendMany(m) => {
