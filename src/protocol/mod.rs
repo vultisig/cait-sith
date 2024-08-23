@@ -200,8 +200,10 @@ pub fn run_protocol_todelete<T: std::fmt::Debug>(
 
     let size = ps.len();
     let mut out = Vec::with_capacity(size);
-    let mut k = 0;
-    while out.len() < size && k < 30 {
+    //let mut k = 0;
+    while out.len() < size
+    /*&& k < 30 */
+    {
         for i in 0..size {
             while {
                 let action = ps[i].1.poke()?;
@@ -230,7 +232,7 @@ pub fn run_protocol_todelete<T: std::fmt::Debug>(
                 }
             } {}
         }
-        k = k + 1;
+        //k = k + 1;
     }
 
     Ok(out)

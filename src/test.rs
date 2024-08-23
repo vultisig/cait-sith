@@ -46,7 +46,10 @@ pub fn run_reshare<C: CSCurve>(
         .into_iter()
         .map(|(p, out)| (p, (Some(out.private_share), out.public_key)))
         .collect();
-    setup.push((Participant::from(participant_len as u32), (None, pub_key)));
+    for i in participant_len..new_participants.len() {
+        setup.push((Participant::from(i as u32), (None, pub_key)));
+    }
+    //setup.push((Participant::from(participant_len as u32), (None, pub_key)));
     let mut protocols: Vec<(Participant, Box<dyn Protocol<Output = Scalar>>)> =
         Vec::with_capacity(participant_len);
 
@@ -67,7 +70,7 @@ pub fn run_reshare<C: CSCurve>(
     run_protocol(protocols).unwrap()
 }
 
-fn run_presign(
+pub fn run_presign(
     participants: Vec<(Participant, KeygenOutput<Secp256k1>)>,
     shares0: Vec<TripleShare<Secp256k1>>,
     shares1: Vec<TripleShare<Secp256k1>>,
@@ -111,7 +114,7 @@ fn run_presign(
 }
 
 #[allow(clippy::type_complexity)]
-fn run_sign(
+pub fn run_sign(
     participants: Vec<(Participant, PresignOutput<Secp256k1>)>,
     public_key: AffinePoint,
     msg: &[u8],
@@ -173,9 +176,13 @@ fn test_e2e_reshare() {
         Participant::from(1u32),
         Participant::from(2u32),
         Participant::from(3u32),
-        //Participant::from(4u32),
+        /*Participant::from(4u32),
+        Participant::from(5u32),
+        Participant::from(6u32),
+        Participant::from(7u32),
+        Participant::from(8u32),*/
     ];
-    let t = 3;
+    let t = 2;
     let new_t = 3;
 
     println!("start");
