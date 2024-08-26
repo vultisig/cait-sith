@@ -2,6 +2,8 @@ use k256::{AffinePoint, Scalar, Secp256k1};
 use rand_core::OsRng;
 
 use crate::compat::scalar_hash;
+use crate::triples::TripleGenerationOutput;
+use crate::triples::generate_triple;
 use crate::keyshare::reshare_keygen_output;
 use crate::participants;
 use k256::elliptic_curve::CurveArithmetic;
@@ -382,14 +384,65 @@ fn test_e2e_mpc_reshare() {
 
     //________________________________triples________________________________
 
-    let (pub0, shares0) = triples::deal(&mut OsRng, &new_participants, new_t);
+    /*let (pub0, shares0) = triples::deal(&mut OsRng, &new_participants, new_t);
     let (pub1, shares1) = triples::deal(&mut OsRng, &new_participants, new_t);
 
     assert!(reshare_result.len() == shares0.len());
     assert!(reshare_result.len() == shares1.len());
     //#[allow(clippy::type_complexity)]
 
-    println!("triples done");
+    println!("triples done");*/
+
+
+
+    // mpc triples 
+
+    let mut protocols1: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(new_participants.len());
+    let mut protocols0: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(new_participants.len());
+
+    for &p in &new_participants {
+        let protocol1 = generate_triple(&new_participants, p, new_t);
+        let protocol0 = generate_triple(&new_participants, p, new_t);
+
+        assert!(protocol1.is_ok());
+        assert!(protocol0.is_ok());
+
+        let protocol1 = protocol1.unwrap();
+        let protocol0 = protocol0.unwrap();
+
+        protocols1.push((p, Box::new(protocol1)));
+        protocols0.push((p, Box::new(protocol0)));
+    }
+
+
+
+    let size = protocols1.len();
+    let mut out1 = Vec::with_capacity(size);
+    let mut out0 = Vec::with_capacity(size);
+    while out1.len() < size || out0.len() < size {
+        for i in 0..size {
+            run_protocol_mpc(&mut protocols1, size, i, &mut out1).unwrap();
+            run_protocol_mpc(&mut protocols0, size, i, &mut out0).unwrap();
+        }
+    }
+
+ 
+    let pub1: TriplePub<Secp256k1> = out1[0].1.1.clone();
+    let pub0: TriplePub<Secp256k1> = out0[0].1.1.clone();
+
+    out1.sort_by_key(|(p, _)| *p);
+    out0.sort_by_key(|(p, _)| *p);
+    let shares1: Vec<TripleShare<Secp256k1>> = out1.into_iter().map(|(_, (share, _))| share).collect();
+    let shares0: Vec<TripleShare<Secp256k1>> = out0.into_iter().map(|(_, (share, _))| share).collect();
+    // Extract TriplePub objects for the first participant (index 0)
+    
+
 
     /*//____________
     let mut presign_result = run_presign(reshare_result, shares0, shares1, &pub0, &pub1, t);
