@@ -1,5 +1,6 @@
 use k256::{AffinePoint, Scalar, Secp256k1};
 use rand_core::OsRng;
+use std::time::{Duration, Instant};
 
 use crate::compat::scalar_hash;
 use crate::triples::TripleGenerationOutput;
@@ -145,69 +146,126 @@ fn run_sign_mpc(
     protocol.unwrap()
 }
 
-#[test]
-//#[ignore]
-fn test_e2e_mpc() {
-    let participants = vec![
-        Participant::from(0u32),
-        Participant::from(1u32),
-        Participant::from(2u32),
-        Participant::from(3u32),
-        Participant::from(4u32),
-        Participant::from(5u32),
-        Participant::from(6u32),
-        Participant::from(7u32),
-        Participant::from(8u32),
-        Participant::from(9u32),
-        Participant::from(10u32),
-        Participant::from(11u32),
-        Participant::from(12u32),
-        Participant::from(13u32),
-        Participant::from(14u32),
-        Participant::from(15u32),
-        Participant::from(16u32),
-        Participant::from(17u32),
-        Participant::from(18u32),
-        Participant::from(19u32),
-        Participant::from(20u32),
-    ];
-    let t = 14;
 
-    //#[allow(clippy::type_complexity)]
+#[test]
+fn test_e2e_mpc_3_2() {
+    let num_runs = 1;
+    let mut total_duration = Duration::new(0, 0);
+
+    for _ in 0..num_runs {
+        let start = Instant::now();
+        test_e2e_mpc(3, 2);
+        total_duration += start.elapsed();
+    }
+
+    let mean_duration = total_duration / num_runs as u32;
+    println!("Mean duration over {} runs: {:?}", num_runs, mean_duration);
+}
+
+#[test]
+fn test_e2e_mpc_20_14() {
+    let num_runs = 1;
+    let mut total_duration = Duration::new(0, 0);
+
+    for _ in 0..num_runs {
+        let start = Instant::now();
+        test_e2e_mpc(20, 14);
+        total_duration += start.elapsed();
+    }
+
+    let mean_duration = total_duration / num_runs as u32;
+    println!("Mean duration over {} runs: {:?}", num_runs, mean_duration);
+}
+
+#[test]
+fn test_e2e_mpc_5_3() {
+    test_e2e_mpc(5, 3);
+}
+
+fn test_e2e_mpc(num_participants: usize, t: usize) {
+    let participants: Vec<Participant> = (0..num_participants)
+        .map(|i| Participant::from(i as u32))
+        .collect();
+    // Keygen
+    let keygen_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
     )> = Vec::with_capacity(participants.len());
 
     for p in 0..participants.len() {
-        let protocol = run_keygen_mpc(participants.clone(), t, p);
+        let protocol = keygen(&participants, participants[p], t);
+        assert!(protocol.is_ok());
+        let protocol = protocol.unwrap();
         protocols.push((participants[p], Box::new(protocol)));
     }
-    //mpc protocol for dkg
+    
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
     let mut keygen_result = out;
     keygen_result.sort_by_key(|(p, _)| *p);
-
-    //println!("this is keygen {:?} \n", keygen_result);
 
     let public_key = keygen_result[0].1.public_key;
     assert_eq!(keygen_result[0].1.public_key, keygen_result[1].1.public_key);
     assert_eq!(keygen_result[1].1.public_key, keygen_result[2].1.public_key);
 
-    let (pub0, shares0) = triples::deal(&mut OsRng, &participants, t);
-    let (pub1, shares1) = triples::deal(&mut OsRng, &participants, t);
+    let keygen_duration = keygen_start.elapsed();
+    println!("Keygen duration: {:?}", keygen_duration);
 
-    assert!(keygen_result.len() == shares0.len());
-    assert!(keygen_result.len() == shares1.len());
-    //#[allow(clippy::type_complexity)]
+
+    // Triple Generation
+    let triple_gen_start = Instant::now();
+    let mut protocols1: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(participants.len());
+    let mut protocols0: Vec<(
+        Participant,
+        Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>>>,
+    )> = Vec::with_capacity(participants.len());
+
+    for &p in &participants {
+        let protocol1 = generate_triple(&participants, p, t);
+        let protocol0 = generate_triple(&participants, p, t);
+
+        assert!(protocol1.is_ok());
+        assert!(protocol0.is_ok());
+
+        let protocol1 = protocol1.unwrap();
+        let protocol0 = protocol0.unwrap();
+
+        protocols1.push((p, Box::new(protocol1)));
+        protocols0.push((p, Box::new(protocol0)));
+    }
+
+    let size = protocols1.len();
+    let mut out1 = Vec::with_capacity(size);
+    let mut out0 = Vec::with_capacity(size);
+    while out1.len() < size || out0.len() < size {
+        for i in 0..size {
+            run_protocol_mpc(&mut protocols1, size, i, &mut out1).unwrap();
+            run_protocol_mpc(&mut protocols0, size, i, &mut out0).unwrap();
+        }
+    }
+
+    let pub1: TriplePub<Secp256k1> = out1[0].1.1.clone();
+    let pub0: TriplePub<Secp256k1> = out0[0].1.1.clone();
+
+    out1.sort_by_key(|(p, _)| *p);
+    out0.sort_by_key(|(p, _)| *p);
+    let shares1: Vec<TripleShare<Secp256k1>> = out1.into_iter().map(|(_, (share, _))| share).collect();
+    let shares0: Vec<TripleShare<Secp256k1>> = out0.into_iter().map(|(_, (share, _))| share).collect();
+
+    let triple_gen_duration = triple_gen_start.elapsed();
+    println!("Triple Generation duration: {:?}", triple_gen_duration);
+
+    // Presigning
+    let presigning_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = PresignOutput<Secp256k1>>>,
@@ -233,25 +291,24 @@ fn test_e2e_mpc() {
         protocols.push((p, Box::new(protocol)));
     }
 
-    //mpc protocol for presign
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
-
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
 
     let mut presign_result = out;
     presign_result.sort_by_key(|(p, _)| *p);
 
-    println!("this is presign {:?} \n", presign_result);
+    let presigning_duration = presigning_start.elapsed();
+    println!("Presigning duration: {:?}", presigning_duration);
 
     let msg = b"hello world";
 
+    // Signing
+    let signing_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = FullSignature<Secp256k1>>>,
@@ -264,18 +321,19 @@ fn test_e2e_mpc() {
         protocols.push((p, Box::new(protocol)));
     }
 
-    //start run mpc protocol
-
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
-
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        println!("out {:?} \n ", out);
     }
+
+    let signing_duration = signing_start.elapsed();
+    println!("Signing duration: {:?}", signing_duration);
+
+    let total_duration = keygen_duration + triple_gen_duration + presigning_duration + signing_duration;
+    println!("Total duration: {:?}", total_duration);
 }
 
 #[test]
@@ -294,7 +352,9 @@ fn test_e2e_mpc_reshare() {
 
     let participants = &new_participants[..3];
     let new_t = 6;
-    //#[allow(clippy::type_complexity)]
+
+    // Keygen
+    let keygen_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = KeygenOutput<Secp256k1>>>,
@@ -306,29 +366,26 @@ fn test_e2e_mpc_reshare() {
         let protocol = protocol.unwrap();
         protocols.push((participants[p], Box::new(protocol)));
     }
-    //mpc protocol for dkg
+    
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
     let mut keygen_result = out;
     keygen_result.sort_by_key(|(p, _)| *p);
-
-    //println!("this is keygen {:?} \n", keygen_result);
 
     let public_key = keygen_result[0].1.public_key;
     assert_eq!(keygen_result[0].1.public_key, keygen_result[1].1.public_key);
     assert_eq!(keygen_result[1].1.public_key, keygen_result[2].1.public_key);
 
-    //let mut reshare_result = run_reshare::<Secp256k1>(keygen_result, t, &new_participants, new_t);
+    let keygen_duration = keygen_start.elapsed();
+    println!("Keygen duration: {:?}", keygen_duration);
 
-    //_____________________________reshare 1/2
-
+    // Resharing
+    let resharing_start = Instant::now();
     let old_participants: Vec<_> = keygen_result.clone().into_iter().collect();
     let old_participants_list: Vec<Participant> =
         old_participants.iter().map(|(p, _)| *p).collect();
@@ -361,42 +418,22 @@ fn test_e2e_mpc_reshare() {
         protocols.push((*p, Box::new(protocol)));
     }
 
-    //________________________________reshare 2/2_
-    //mpc protocol for reshare
-    println!("this is protocol len {:?} \n", protocols.len());
-    println!(
-        "this is new participent len {:?} \n",
-        new_participants.len()
-    );
-
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
 
     let mut reshare_result = out;
     reshare_result.sort_by_key(|(p, _)| *p);
 
-    //________________________________triples________________________________
+    let resharing_duration = resharing_start.elapsed();
+    println!("Resharing duration: {:?}", resharing_duration);
 
-    /*let (pub0, shares0) = triples::deal(&mut OsRng, &new_participants, new_t);
-    let (pub1, shares1) = triples::deal(&mut OsRng, &new_participants, new_t);
-
-    assert!(reshare_result.len() == shares0.len());
-    assert!(reshare_result.len() == shares1.len());
-    //#[allow(clippy::type_complexity)]
-
-    println!("triples done");*/
-
-
-
-    // mpc triples 
-
+    // Triple Generation
+    let triple_gen_start = Instant::now();
     let mut protocols1: Vec<(
         Participant,
         Box<dyn Protocol<Output = TripleGenerationOutput<Secp256k1>>>,
@@ -420,8 +457,6 @@ fn test_e2e_mpc_reshare() {
         protocols0.push((p, Box::new(protocol0)));
     }
 
-
-
     let size = protocols1.len();
     let mut out1 = Vec::with_capacity(size);
     let mut out0 = Vec::with_capacity(size);
@@ -432,7 +467,6 @@ fn test_e2e_mpc_reshare() {
         }
     }
 
- 
     let pub1: TriplePub<Secp256k1> = out1[0].1.1.clone();
     let pub0: TriplePub<Secp256k1> = out0[0].1.1.clone();
 
@@ -440,21 +474,12 @@ fn test_e2e_mpc_reshare() {
     out0.sort_by_key(|(p, _)| *p);
     let shares1: Vec<TripleShare<Secp256k1>> = out1.into_iter().map(|(_, (share, _))| share).collect();
     let shares0: Vec<TripleShare<Secp256k1>> = out0.into_iter().map(|(_, (share, _))| share).collect();
-    // Extract TriplePub objects for the first participant (index 0)
-    
 
+    let triple_gen_duration = triple_gen_start.elapsed();
+    println!("Triple Generation duration: {:?}", triple_gen_duration);
 
-    /*//____________
-    let mut presign_result = run_presign(reshare_result, shares0, shares1, &pub0, &pub1, t);
-    println!("end presign");
-
-    presign_result.sort_by_key(|(p, _)| *p);
-
-    let msg = b"hello world";
-
-    run_sign(presign_result, public_key, msg);*/
-
-    //__________________________________presign 1/2__________________________
+    // Presigning
+    let presigning_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = PresignOutput<Secp256k1>>>,
@@ -480,30 +505,24 @@ fn test_e2e_mpc_reshare() {
         protocols.push((p, Box::new(protocol)));
     }
 
-    //println!("presign 1/2 done");
-
-    //____________________________________presign 2/2_____________________________
-
-    //mpc protocol for presign
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
-
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
 
     let mut presign_result = out;
     presign_result.sort_by_key(|(p, _)| *p);
 
-    println!("presign done");
+    let presigning_duration = presigning_start.elapsed();
+    println!("Presigning duration: {:?}", presigning_duration);
 
     let msg = b"hello world";
 
-    //_____________________________________sign 1/2__________________________________
+    // Signing
+    let signing_start = Instant::now();
     let mut protocols: Vec<(
         Participant,
         Box<dyn Protocol<Output = FullSignature<Secp256k1>>>,
@@ -516,18 +535,17 @@ fn test_e2e_mpc_reshare() {
         protocols.push((p, Box::new(protocol)));
     }
 
-    //____________________________________sign 2/2 ____________________________________
-
-    //start run mpc protocol
-
     let size = protocols.len();
     let mut out = Vec::with_capacity(size);
     while out.len() < size {
         for i in 0..size {
-            //println!("loop {:?} \n ", i);
-
             run_protocol_mpc(&mut protocols, size, i, &mut out).unwrap();
         }
-        //println!("out {:?} \n ", out);
     }
+
+    let signing_duration = signing_start.elapsed();
+    println!("Signing duration: {:?}", signing_duration);
+
+    let total_duration = keygen_duration + resharing_duration + triple_gen_duration + presigning_duration + signing_duration;
+    println!("Total duration: {:?}", total_duration);
 }

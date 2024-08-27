@@ -70,6 +70,12 @@ async fn do_sign<C: CSCurve>(
         chan.send_many(wait0, &s_i).await;
     }
 
+    println!("Round 1- Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
+
     // Spec 2.1 + 2.2
     let mut seen = ParticipantCounter::new(&participants);
     let mut s: C::Scalar = s_i;
@@ -96,6 +102,10 @@ async fn do_sign<C: CSCurve>(
     }
 
     // Spec 2.4
+    println!("Round 2 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
     Ok(sig)
 }
 

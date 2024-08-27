@@ -61,6 +61,11 @@ async fn do_generation<C: CSCurve>(
     let wait0 = chan.next_waitpoint();
     chan.send_many(wait0, &my_commitment).await;
 
+    println!("Round 1 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
     // Spec 2.1
     let mut all_commitments = ParticipantMap::new(&participants);
     all_commitments.put(me, my_commitment);
@@ -140,6 +145,11 @@ async fn do_generation<C: CSCurve>(
     }
     let mut a_i = e.evaluate(&me.scalar::<C>());
     let mut b_i = f.evaluate(&me.scalar::<C>());
+
+    println!("Round 2 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
 
     // Spec 3.1 + 3.2
     let mut seen = ParticipantCounter::new(&participants);
@@ -297,6 +307,11 @@ async fn do_generation<C: CSCurve>(
     )
     .await;
 
+    println!("Round 3 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
     // Spec 4.1 + 4.2 + 4.3
     seen.clear();
     seen.put(me);
@@ -366,6 +381,10 @@ async fn do_generation<C: CSCurve>(
     }
     let mut c_i = l.evaluate(&me.scalar::<C>());
 
+    println!("Round 4 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
     // Spec 5.1 + 5.2 + 5.3
     seen.clear();
     seen.put(me);
@@ -425,6 +444,10 @@ async fn do_generation<C: CSCurve>(
     let big_b = big_f.evaluate_zero().into();
     let big_c = big_c.into();
 
+    println!("Round 5 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
     Ok((
         TripleShare {
             a: a_i,

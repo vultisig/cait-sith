@@ -87,6 +87,11 @@ async fn do_presign<C: CSCurve>(
         chan.send_many(wait1, &(ka_i, xb_i)).await;
     }
 
+    println!("Round 1 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
     // Spec 2.1 and 2.2
     let mut kd = kd_i;
     let mut seen = ParticipantCounter::new(&participants);
@@ -138,6 +143,11 @@ async fn do_presign<C: CSCurve>(
 
     // Spec 2.8
     let sigma_i = ka * args.keygen_out.private_share - xb * a_i + c_i;
+
+    println!("Round 2 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
 
     Ok(PresignOutput {
         big_r,

@@ -51,6 +51,7 @@ use smol::{
     lock::Mutex,
     Executor, Task,
 };
+use bincode;
 use std::{collections::HashMap, error, future::Future, sync::Arc};
 
 use crate::serde::{decode, encode_with_tag};
@@ -249,10 +250,11 @@ pub enum Message {
 }
 
 #[derive(Clone)]
-struct Comms {
+pub struct Comms {
     buffer: MessageBuffer,
     message_s: Sender<Message>,
     message_r: Receiver<Message>,
+    pub data_tracker: DataTracker,
 }
 
 impl Comms {
@@ -263,7 +265,12 @@ impl Comms {
             buffer: MessageBuffer::new(),
             message_s,
             message_r,
+            data_tracker: DataTracker::default(),
         }
+    }
+
+    pub fn reset_data_tracker(&mut self) {
+        self.data_tracker = DataTracker::default();
     }
 
     async fn outgoing(&self) -> Message {
@@ -321,7 +328,7 @@ impl Comms {
 /// Represents a shared channel.
 pub struct SharedChannel {
     header: MessageHeader,
-    comms: Comms,
+    pub comms: Comms,
 }
 
 impl SharedChannel {
@@ -338,6 +345,8 @@ impl SharedChannel {
     }
 
     pub async fn send_many<T: Serialize>(&self, waitpoint: Waitpoint, data: &T) {
+        let serialized = bincode::serialize(data).unwrap();
+        self.comms.data_tracker.add_sent(serialized.len());
         self.comms
             .send_many(self.header.with_waitpoint(waitpoint), data)
             .await
@@ -349,17 +358,21 @@ impl SharedChannel {
         to: Participant,
         data: &T,
     ) {
+        let serialized = bincode::serialize(data).unwrap();
+        self.comms.data_tracker.add_sent(serialized.len());
         self.comms
             .send_private(self.header.with_waitpoint(waitpoint), to, data)
             .await
     }
 
-    pub async fn recv<T: DeserializeOwned>(
+    pub async fn recv<T: DeserializeOwned + Serialize>(
         &self,
         waitpoint: Waitpoint,
     ) -> Result<(Participant, T), ProtocolError> {
-        self.comms.recv(self.header.with_waitpoint(waitpoint)).await
-    }
+        let result = self.comms.recv(self.header.with_waitpoint(waitpoint)).await?;
+        let serialized = bincode::serialize(&result.1).unwrap();
+        self.comms.data_tracker.add_received(serialized.len());
+        Ok(result)    }
 }
 
 /// Represents a private channel.
@@ -368,7 +381,7 @@ impl SharedChannel {
 pub struct PrivateChannel {
     header: MessageHeader,
     to: Participant,
-    comms: Comms,
+    pub comms: Comms,
 }
 
 impl PrivateChannel {
@@ -416,6 +429,42 @@ impl PrivateChannel {
     }
 }
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+
+#[derive(Default)]
+pub struct DataTracker {
+    sent: AtomicUsize,
+    received: AtomicUsize,
+}
+
+impl Clone for DataTracker {
+    fn clone(&self) -> Self {
+        Self {
+            sent: AtomicUsize::new(self.sent.load(Ordering::Relaxed)),
+            received: AtomicUsize::new(self.received.load(Ordering::Relaxed)),
+        }
+    }
+}
+
+impl DataTracker {
+    pub fn add_sent(&self, size: usize) {
+        self.sent.fetch_add(size, Ordering::Relaxed);
+    }
+
+    pub fn add_received(&self, size: usize) {
+        self.received.fetch_add(size, Ordering::Relaxed);
+    }
+
+    pub fn get_sent_kb(&self) -> f64 {
+        self.sent.load(Ordering::Relaxed) as f64 / 1024.0
+    }
+
+    pub fn get_received_kb(&self) -> f64 {
+        self.received.load(Ordering::Relaxed) as f64 / 1024.0
+    }
+}
+
 /// Represents the context that protocols have access to.
 ///
 /// This allows us to spawn new tasks, and send and receive messages.
@@ -425,6 +474,7 @@ impl PrivateChannel {
 pub struct Context<'a> {
     comms: Comms,
     executor: Arc<Executor<'a>>,
+    pub data_tracker: DataTracker,
 }
 
 impl<'a> Context<'a> {
@@ -432,6 +482,7 @@ impl<'a> Context<'a> {
         Self {
             comms: Comms::new(),
             executor: Arc::new(Executor::new()),
+            data_tracker: DataTracker::default(),
         }
     }
 

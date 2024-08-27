@@ -48,6 +48,12 @@ async fn do_keyshare<C: CSCurve>(
     chan.send_many(wait0, &my_commitment).await;
     //println!("after sending first many");
 
+    println!("Round 1 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+    
+
     // Spec 2.1
     let mut all_commitments = ParticipantMap::new(&participants);
     //println!("this is len of participants {:?}", participants.len());
@@ -113,6 +119,12 @@ async fn do_keyshare<C: CSCurve>(
         //println!("after sending first private");
     }
     let mut x_i = f.evaluate(&me.scalar::<C>());
+
+    println!("Round 2 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
 
     // Spec 3.1 + 3.2
     let mut seen = ParticipantCounter::new(&participants);
@@ -196,6 +208,12 @@ async fn do_keyshare<C: CSCurve>(
     };
 
     // Spec 3.9
+
+    println!("Round 3 - Sent: {:.2} KB, Received: {:.2} KB", 
+        chan.comms.data_tracker.get_sent_kb(), 
+        chan.comms.data_tracker.get_received_kb());
+    chan.comms.reset_data_tracker();
+
     Ok((x_i, big_x.into()))
 }
 
