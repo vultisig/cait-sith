@@ -226,7 +226,7 @@ pub struct KeygenOutput<C: CSCurve> {
     pub public_key: C::AffinePoint,
 }
 
-async fn do_keygen<C: CSCurve>(
+pub async fn do_keygen<C: CSCurve>(
     chan: SharedChannel,
     participants: ParticipantList,
     me: Participant,

@@ -126,6 +126,7 @@ mod proofs;
 pub mod protocol;
 mod serde;
 mod sign;
+mod bindings;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
@@ -136,3 +137,5 @@ pub use compat::CSCurve;
 pub use keyshare::{keygen, refresh, reshare, KeygenOutput};
 pub use presign::{presign, PresignArguments, PresignOutput};
 pub use sign::{sign, FullSignature};
+
+

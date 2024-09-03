@@ -179,7 +179,7 @@ fn test_e2e_mpc_20_14() {
 
 #[test]
 fn test_e2e_mpc_5_3() {
-    test_e2e_mpc(5, 3);
+    test_e2e_mpc(17, 11);
 }
 
 fn test_e2e_mpc(num_participants: usize, t: usize) {

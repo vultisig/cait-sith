@@ -41,3 +41,6 @@ k256 = ["dep:k256"]
 name = "network-benches"
 path = "examples/network-benches.rs"
 required-features = ["k256"]
+
+[lib]
+crate-type = ["cdylib"]
