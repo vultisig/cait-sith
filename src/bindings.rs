@@ -1,4 +1,4 @@
-#[no_mangle]
+/*#[no_mangle]
 pub extern "C" fn rust_function_add(arg1: i32, arg2: i32) -> i32 {
     arg1 + arg2
 }
@@ -160,3 +160,5 @@ pub extern "C" fn keygen<C : CSCurve>(
     let fut = do_keygen(ctx.shared_channel(), participants, me, threshold);
     Ok(make_protocol(ctx, fut))
 }*/
+
+*/
